@@ -28,6 +28,7 @@ from kafka.errors import KafkaError
 
 producer = KafkaProducer(bootstrap_servers=config.CONFIG['kafka_producer'])
 logger = logging.getLogger('HomeBaseRx')
+error_file = config.CONFIG['error_file']
 logger.setLevel(logging.INFO)
 
 # Here we define our formatter
@@ -107,7 +108,7 @@ class Packet:
 
 
 def read_packet(packet):
-    device = packet[:id_length]
+    device = int(packet[:id_length], 16)
     device_type = packet[id_length:device_type_length+id_length]
     type = packet[device_type_length +
                   id_length:msg_type_length + device_type_length + id_length]
@@ -138,26 +139,36 @@ def build_ack(packet):
 
 def process_packet(packet):
     s = "Doing something with packet, for device " + ' '.join(str(x) for x in packet.device)
-    logger.info(s);
-    kafka_data = {'device': packet.device, 'type': packet.type,
-                  'device_type': packet.device_type, 'msg': packet.msg, 'tail': packet.tail, 'timestamp': time.time()}
-    producer.send(config.CONFIG['kafka_channel'], json.dumps(kafka_data))
+    logger.info(s)
+    kafka_data = build_kafka_packet(packet.device, packet.type, packet.device_type, packet.msg, packet.tail, time.time())
+    #{'device': packet.device, 'type': packet.type,
+    #              'device_type': packet.device_type, 'msg': packet.msg, 'tail': packet.tail, 'timestamp': time.time()}
+    try:
+        producer.send(config.CONFIG['kafka_channel'], json.dumps(kafka_data))
+    except KafkaError as error:
+        save_failed_payload(kafka_data)
+        logger.error("Faile to send payload to Kafka endpoint, caused by %s", error.message)
+    
     if(packet.tail == 1):
         return False
     else:
         return True
 
-# buiild empty ack (i.e. radio free)
-
-
+# build empty ack (i.e. radio free)
 def clear_ack():
     ack_buffer = [0] * (id_length + device_type_length +
                         msg_type_length + msg_body_length)
     return ack_buffer
 
+def build_kafka_packet(device, type, device_type, msg, tail, time):
+    return {'device': device, 'type': type, 'device_type': device_type, 'msg': msg, 'tail': tail, 'timestamp': time}
+
+# save offline payload
+def save_failed_payload(payload):
+    with open('Failed.py', 'w') as file:
+        file.write(payload)
+
 # start listening / reading from the pipe
-
-
 def start(rx_hold_timeout):
     logger.info("Starting HomeBaseRX application.");
     ack_target = [0]  # set open

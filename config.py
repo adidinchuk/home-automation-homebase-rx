@@ -6,5 +6,6 @@ CONFIG = {
     'ce_pin': 22,
     'rx_hold_timeout': 30,
     'kafka_producer': '192.168.0.19:9092',
-    'kafka_channel': 'octonade-pipe'
+    'kafka_channel': 'octonade-pipe',
+    'error_file': 'errors/file.log'
 }
